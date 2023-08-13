@@ -137,7 +137,7 @@ public sealed class OggReader
         Log.Information("ogg: seeking track={TrackId} to frame_ts={RequiredTs}", track.Id, ts);
 
         // Do the actual seek.
-        return this.DoSeek(track.Id, ts);
+        return this.DoSeek(mode, track.Id, ts);
     }
 
 
@@ -357,7 +357,7 @@ public sealed class OggReader
         return Unit.Default;
     }
 
-    private Result<SeekedTo> DoSeek(uint serial, ulong requiredTs)
+    private Result<SeekedTo> DoSeek(SeekMode seekMode, uint serial, ulong requiredTs)
     {
         // If the reader is seekable, then use the bisection method to coarsely seek to the nearest
         // page that ends before the required timestamp.
@@ -385,23 +385,81 @@ public sealed class OggReader
             
             // Estimate the byte position using linear interpolation
             long estimatedBytePos = (long)(fraction * physicalEnd);
-            
-            // Define an offset (buffer) around the estimated position
-            long offset = OggPage.OGG_PAGE_MAX_SIZE * 5; // Just an example value
-            
-            // Set the start and end byte positions based on the estimated position and offset
-            var startBytePos = (ulong)Math.Max(0, estimatedBytePos - offset);
-            var endBytePos = Math.Min((ulong)physicalEnd, (ulong)estimatedBytePos + (ulong)offset);
-
-            // Bisection method.
-            while (true)
+            if (seekMode is SeekMode.Accurate)
             {
-                // Find the middle of the upper and lower byte search range.
-                var midBytePos = (startBytePos + endBytePos) / 2;
+                // Define an offset (buffer) around the estimated position
+                long offset = OggPage.OGG_PAGE_MAX_SIZE * 5; // Just an example value
 
-                // Seek to the middle of the byte range.
-                this.Reader.Seek(SeekOrigin.Begin, midBytePos);
+                // Set the start and end byte positions based on the estimated position and offset
+                var startBytePos = (ulong)Math.Max(0, estimatedBytePos - offset);
+                var endBytePos = Math.Min((ulong)physicalEnd, (ulong)estimatedBytePos + (ulong)offset);
 
+                // Bisection method.
+                while (true)
+                {
+                    // Find the middle of the upper and lower byte search range.
+                    var midBytePos = (startBytePos + endBytePos) / 2;
+
+                    // Seek to the middle of the byte range.
+                    this.Reader.Seek(SeekOrigin.Begin, midBytePos);
+
+                    // Read the next page.
+                    var result = this.Pages.NextPageForSerial(Reader, serial);
+                    if (result.IsFaulted)
+                    {
+                        return new Result<SeekedTo>(new SeekError(SeekErrorType.OutOfRange));
+                    }
+
+                    // Probe the page to get the start and end timestamp.
+                    var (startTs, endTs) = stream.InspectPage(this.Pages.Page());
+
+                    Log.Debug(
+                        "ogg: seek: bisect step: page={{ start={StartTs}, end={EndTs} }} byte_range=[{StartBytePos}..{EndBytePos}], mid={MidBytePos}",
+                        startTs, endTs, startBytePos, endBytePos, midBytePos);
+
+                    if (requiredTs < startTs)
+                    {
+                        // The required timestamp is less-than the timestamp of the first sample in
+                        // page1. Update the upper bound and bisect again.
+                        endBytePos = midBytePos;
+                    }
+                    else if (requiredTs > endTs)
+                    {
+                        // The required timestamp is greater-than the timestamp of the final sample in
+                        // the in page1. Update the lower bound and bisect again.
+                        startBytePos = midBytePos;
+                    }
+                    else
+                    {
+                        // The sample with the required timestamp is contained in page1. Return the
+                        // byte position for page0, and the timestamp of the first sample in page1, so
+                        // that when packets from page1 are read, those packets will have a non-zero
+                        // base timestamp.
+                        break;
+                    }
+
+
+                    // Prevent infinite iteration and too many seeks when the search range is less
+                    // than 2x the maximum page size.
+                    if ((endBytePos - startBytePos) <= (2 * OggPage.OGG_PAGE_MAX_SIZE))
+                    {
+                        this.Reader.Seek(SeekOrigin.Begin, startBytePos);
+
+                        var res = this.Pages.NextPageForSerial(this.Reader, serial);
+                        if (res.IsFaulted)
+                        {
+                            return new Result<SeekedTo>(new SeekError(SeekErrorType.OutOfRange));
+                        }
+
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                //use estimated byte position for coarse seek
+                this.Reader.Seek(SeekOrigin.Begin, (ulong)estimatedBytePos);
+                
                 // Read the next page.
                 var result = this.Pages.NextPageForSerial(Reader, serial);
                 if (result.IsFaulted)
@@ -413,47 +471,10 @@ public sealed class OggReader
                 var (startTs, endTs) = stream.InspectPage(this.Pages.Page());
 
                 Log.Debug(
-                    "ogg: seek: bisect step: page={{ start={StartTs}, end={EndTs} }} byte_range=[{StartBytePos}..{EndBytePos}], mid={MidBytePos}",
-                    startTs, endTs, startBytePos, endBytePos, midBytePos);
+                    "ogg: seek: coarse seek: page={{ start={StartTs}, end={EndTs} }}. Estimated byte position: {EstimatedBytePos}",
+                    startTs, endTs, estimatedBytePos);
 
-                if (requiredTs < startTs)
-                {
-                    // The required timestamp is less-than the timestamp of the first sample in
-                    // page1. Update the upper bound and bisect again.
-                    endBytePos = midBytePos;
-                }
-                else if (requiredTs > endTs)
-                {
-                    // The required timestamp is greater-than the timestamp of the final sample in
-                    // the in page1. Update the lower bound and bisect again.
-                    startBytePos = midBytePos;
-                }
-                else
-                {
-                    // The sample with the required timestamp is contained in page1. Return the
-                    // byte position for page0, and the timestamp of the first sample in page1, so
-                    // that when packets from page1 are read, those packets will have a non-zero
-                    // base timestamp.
-                    break;
-                }
-
-
-                // Prevent infinite iteration and too many seeks when the search range is less
-                // than 2x the maximum page size.
-                if ((endBytePos - startBytePos) <= (2 * OggPage.OGG_PAGE_MAX_SIZE))
-                {
-                    this.Reader.Seek(SeekOrigin.Begin, startBytePos);
-
-                    var res = this.Pages.NextPageForSerial(this.Reader, serial);
-                    if (res.IsFaulted)
-                    {
-                        return new Result<SeekedTo>(new SeekError(SeekErrorType.OutOfRange));
-                    }
-
-                    break;
-                }
             }
-
             // Reset all logical bitstreams since the physical stream will be reading from a new
             // location now.
             foreach (var (s, str) in this.Streams)
@@ -498,11 +519,13 @@ public sealed class OggReader
             }
         }
 
-        var accuracyFrac = (double)actualTs / requiredTs;
-
+        //var accuracyFrac = (double)actualTs / requiredTs;
+        var percentageDiff = (double)((long)actualTs - (long)requiredTs) / (double)actualTs;
+        var accuracyFrac = 1 - percentageDiff;
+        
         //Log: "ogg: seeked track={TrackId} to packet_ts={ActualTs} (delta={Delta}). accuracy={Accuracy}%"
         Log.Information("ogg: seeked track={TrackId} to packet_ts={ActualTs} (delta={Delta}). accuracy={Accuracy}%",
-            serial, actualTs, actualTs - requiredTs, accuracyFrac * 100);
+            serial, actualTs, (long)actualTs - (long)requiredTs, accuracyFrac * 100);
         return new Result<SeekedTo>(new SeekedTo(serial, requiredTs, actualTs));
     }
 
