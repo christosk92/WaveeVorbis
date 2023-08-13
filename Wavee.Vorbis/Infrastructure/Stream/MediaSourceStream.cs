@@ -278,7 +278,9 @@ public sealed class MediaSourceStream : IReadBytes, ISeekBuffered, IDisposable
             return this.WritePos - this.ReadPos;
         }
 
-        return this.WritePos + (this.Ring.Count - this.ReadPos);
+        var ringSize = Ring.Array.Length;
+        var ringCount = Ring.Count;
+        return this.WritePos + (ringSize - this.ReadPos);
     }
 
     public ulong Position()
@@ -297,7 +299,7 @@ public sealed class MediaSourceStream : IReadBytes, ISeekBuffered, IDisposable
             //            assert!(pos - old_pos < std::isize::MAX as u64);
             if (pos - oldPos > int.MaxValue)
             {
-                throw new ArgumentOutOfRangeException(nameof(pos));
+                throw new IOException(nameof(pos));
             }
 
             delta = (int)(pos - oldPos);
@@ -307,7 +309,7 @@ public sealed class MediaSourceStream : IReadBytes, ISeekBuffered, IDisposable
             // Backward seek.
             if (oldPos - pos > int.MaxValue)
             {
-                throw new ArgumentOutOfRangeException(nameof(pos));
+                throw new IOException(nameof(pos));
             }
 
             delta = -(int)(oldPos - pos);

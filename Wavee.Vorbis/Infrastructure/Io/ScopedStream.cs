@@ -28,7 +28,7 @@ public sealed class ScopedStream<T> : IReadBytes, ISeekBuffered where T : IReadB
     public Span<byte> ReadQuadBytes()
     {
         if (_len - _read < 4)
-            throw new ArgumentOutOfRangeException();
+            throw new IOException();
 
         _read += 4;
         return _inner.ReadQuadBytes();
@@ -47,7 +47,7 @@ public sealed class ScopedStream<T> : IReadBytes, ISeekBuffered where T : IReadB
     public byte ReadByte()
     {
         if (_len - _read < 1)
-            throw new ArgumentOutOfRangeException();
+            throw new IOException();
         
         _read += 1;
         return _inner.ReadByte();
@@ -55,8 +55,8 @@ public sealed class ScopedStream<T> : IReadBytes, ISeekBuffered where T : IReadB
 
     public Result<Unit> ReadBufferExactly(Span<byte> buf)
     {
-        if (_len - _read < (ulong)buf.Length)
-            throw new ArgumentOutOfRangeException();
+        //if (_len - _read < (ulong)buf.Length)
+          //  throw new IOException();
 
         _read += (ulong)buf.Length;
         return _inner.ReadBufferExactly(buf);

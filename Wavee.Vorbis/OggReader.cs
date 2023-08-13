@@ -58,7 +58,8 @@ public sealed class OggReader
         {
             var time = this.DefaultTrack.Bind(t => t.CodecParams.NFrames)
                 .Bind(f => DefaultTrack.Map(t => t.CodecParams.StartTs + f))
-                .Bind(ts => this.DefaultTrack.Bind(t => t.CodecParams.SampleRate.Map(sampleRate => new TimeBase(1, sampleRate).CalcTime(ts))))
+                .Bind(ts => this.DefaultTrack.Bind(t =>
+                    t.CodecParams.SampleRate.Map(sampleRate => new TimeBase(1, sampleRate).CalcTime(ts))))
                 .Bind(f => f.Match(
                     Succ: x => x,
                     Fail: e =>
@@ -367,8 +368,30 @@ public sealed class OggReader
             // The end of the physical stream.
             var physicalEnd = this.PhysByteRangeEnd.ValueUnsafe();
 
-            var startBytePos = this.PhysByteRangeStart;
-            var endBytePos = physicalEnd;
+            // var startBytePos = this.PhysByteRangeStart;
+            // var endBytePos = physicalEnd;
+            var totalDuration = new TimeBase(1, stream.CodecParams.SampleRate.ValueUnsafe())
+                .CalcTimestamp(TotalTime.ValueUnsafe()).Match(
+                    Succ: x => x,
+                    Fail: e =>
+                    {
+                        Log.Error(e, "Error calculating total duration");
+                        return 0UL;
+                    }
+                );
+
+            // Calculate the fraction of the required timestamp relative to the total duration
+            double fraction = (double)requiredTs / totalDuration;
+            
+            // Estimate the byte position using linear interpolation
+            long estimatedBytePos = (long)(fraction * physicalEnd);
+            
+            // Define an offset (buffer) around the estimated position
+            long offset = OggPage.OGG_PAGE_MAX_SIZE * 10; // Just an example value
+            
+            // Set the start and end byte positions based on the estimated position and offset
+            var startBytePos = (ulong)Math.Max(0, estimatedBytePos - offset);
+            var endBytePos = Math.Min((ulong)physicalEnd, (ulong)estimatedBytePos + (ulong)offset);
 
             // Bisection method.
             while (true)

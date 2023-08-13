@@ -22,7 +22,7 @@ internal sealed class BitSet256 : IEnumerable<uint>
     {
         if (index < 0 || index >= Size)
         {
-            throw new ArgumentOutOfRangeException(nameof(index));
+            throw new IOException(nameof(index));
         }
 
         int dataIndex = index / 32;
@@ -42,7 +42,7 @@ internal sealed class BitSet256 : IEnumerable<uint>
     {
         if (index < 0 || index >= Size)
         {
-            throw new ArgumentOutOfRangeException(nameof(index));
+            throw new IOException(nameof(index));
         }
 
         int dataIndex = index / 32;

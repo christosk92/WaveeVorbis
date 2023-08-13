@@ -142,7 +142,7 @@ internal static class PhysicalStream
             upperPos = Option<ulong>.Some(reader.Position());
 
             // Read to the next page.
-            var result = pages.TryNextPage(scopedReader);
+            var result = pages.NextPage(scopedReader);
             if (result.IsFaulted)
             {
                 break;

@@ -17,7 +17,7 @@ internal static class ByteExtensions
     {
         if (mid > self.Count)
         {
-            throw new ArgumentOutOfRangeException(nameof(mid), "Mid must be less than or equal to the length of the segment.");
+            throw new IOException( "Mid must be less than or equal to the length of the segment.");
         }
 
         var firstSegment = new ArraySegment<T>(self.Array, self.Offset, mid);

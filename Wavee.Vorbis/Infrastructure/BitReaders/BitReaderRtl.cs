@@ -30,7 +30,7 @@ internal ref struct BitReaderRtlRef
         //Debug.Assert(bitWidth <= 32);
         if (bitWidth > 32)
         {
-            return new Result<int>(new ArgumentOutOfRangeException(nameof(bitWidth)));
+            return new Result<int>(new IOException(nameof(bitWidth)));
         }
 
         var bits = _bits;
