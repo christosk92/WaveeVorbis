@@ -4,7 +4,7 @@ A C# vorbis decoder based on Symphonia (rust)
 Work TODO: 
 - [Floor 0](/Wavee.Vorbis/Decoder/Setup/Floor/Floor0.cs)
 - Convenient wrapper around OggReader/OggVorbis to provide simple samples access
-- Optimize [IMDCT](/WaveeVorbis/blob/main/Wavee.Vorbis/Decoder/Imdct.cs) (Inverse modified discrete cosine transform) 
+- Optimize [IMDCT](/Wavee.Vorbis/Decoder/Imdct.cs) (Inverse modified discrete cosine transform) 
 
 # Usage
 
