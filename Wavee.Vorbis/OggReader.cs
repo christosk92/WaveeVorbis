@@ -387,7 +387,7 @@ public sealed class OggReader
             long estimatedBytePos = (long)(fraction * physicalEnd);
             
             // Define an offset (buffer) around the estimated position
-            long offset = OggPage.OGG_PAGE_MAX_SIZE * 10; // Just an example value
+            long offset = OggPage.OGG_PAGE_MAX_SIZE * 5; // Just an example value
             
             // Set the start and end byte positions based on the estimated position and offset
             var startBytePos = (ulong)Math.Max(0, estimatedBytePos - offset);
